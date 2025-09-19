@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gastos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .monto { text-align:right; }
+    .actions { white-space:nowrap; }
+    .hidden { display:none !important; }
+    .top-right { position:fixed; top:12px; right:12px; }
+  </style>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+
+  <a class="btn btn-outline-secondary top-right" href="{{ url_for('dashboard') }}">⬅ Volver al Dashboard</a>
+
+  <h1 class="mb-3">Registrar Gasto</h1>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}
+        <div class="alert alert-warning">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- ALTA -->
+  <form id="form-alta" method="POST" class="mb-4 card card-body shadow-sm" autocomplete="off">
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-md-6">
+        <label class="form-label">Descripción</label>
+        <!-- Enviamos como 'tipo' para mantener compatibilidad -->
+        <input type="text" name="tipo" class="form-control" required placeholder="Ej: Combustible, Servicios, etc.">
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label">Monto (ARS)</label>
+        <!-- Visible con máscara -->
+        <input type="text" id="monto_fmt_alta" class="form-control text-end" inputmode="decimal" placeholder="$ 0,00">
+        <!-- Oculto que se envía al backend -->
+        <input type="hidden" id="monto_alta" name="monto" value="">
+      </div>
+      <div class="col-12 col-md-2 d-grid">
+        <button type="submit" class="btn btn-success">Registrar Gasto</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- HISTORIAL -->
+  <h2 class="mb-3">Gastos Recientes</h2>
+
+  <div class="table-responsive">
+    <table class="table table-striped align-middle shadow-sm bg-white">
+      <thead class="table-light">
+      <tr>
+        <th style="width:7%">ID</th>
+        <th style="width:38%">Descripción</th>
+        <th style="width:20%" class="text-end">Monto</th>
+        <th style="width:20%">Fecha</th>
+        <th style="width:15%">Acciones</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for g in gastos %}
+        <tr data-id="{{ g['id'] }}">
+          <!-- ID -->
+          <td>{{ g['id'] }}</td>
+
+          <!-- DESCRIPCIÓN: vista + edición inline -->
+          <td>
+            <span class="desc-view">{{ g['tipo'] }}</span>
+            <form class="edit-form hidden" method="POST" action="{{ url_for('gastos_update') }}" autocomplete="off">
+              <input type="hidden" name="id" value="{{ g['id'] }}">
+              <input type="text" name="tipo" class="form-control form-control-sm" value="{{ g['tipo'] }}" required>
+            </form>
+          </td>
+
+          <!-- MONTO: vista + edición inline (monto formateado visible + oculto 'monto') -->
+          <td class="monto">
+            <span class="monto-view" data-monto="{{ g['monto'] or 0 }}"></span>
+            <form class="edit-form hidden" method="POST" action="{{ url_for('gastos_update') }}" autocomplete="off">
+              <input type="hidden" name="id" value="{{ g['id'] }}">
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control text-end monto-fmt" value="" placeholder="$ 0,00" inputmode="decimal">
+              </div>
+              <input type="hidden" name="monto" class="monto-raw" value="">
+            </form>
+          </td>
+
+          <!-- FECHA (solo vista) -->
+          <td>{{ g['fecha'] }}</td>
+
+<!-- ACCIONES -->
+<td class="actions">
+  <button type="button" class="btn btn-sm btn-outline-primary btn-editar">Editar</button>
+
+  <form method="POST" action="{{ url_for('gastos_delete') }}" class="d-inline"
+        onsubmit="return confirm('¿Eliminar gasto #{{ g.id }}?');">
+    <input type="hidden" name="id" value="{{ g.id }}">
+    <button type="submit" class="btn btn-sm btn-outline-danger">Borrar</button>
+  </form>
+
+  <button type="button" class="btn btn-sm btn-primary btn-guardar hidden">Guardar</button>
+  <button type="button" class="btn btn-sm btn-secondary btn-cancelar hidden">Cancelar</button>
+</td>
+
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  // ---------- Helpers de formato ARS ----------
+  function formatARS(value) {
+    const num = Number(value || 0);
+    const entero = Math.trunc(Math.abs(num)).toString();
+    const dec = Math.round((Math.abs(num) - Math.trunc(Math.abs(num))) * 100).toString().padStart(2, '0');
+    const conMiles = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (num < 0 ? '-' : '') + '$ ' + conMiles + ',' + dec;
+  }
+  function parseARS(text) {
+    // De "$ 1.234,56" -> "1234.56" (string)
+    if (!text) return '';
+    let s = (text + '').replace(/[^\d,.-]/g, '');
+    s = s.replace(/\./g, '').replace(',', '.');
+    return s;
+  }
+
+  // ---------- Alta: seteo del hidden antes de enviar ----------
+  const altaFmt = document.getElementById('monto_fmt_alta');
+  const altaRaw = document.getElementById('monto_alta');
+  document.getElementById('form-alta').addEventListener('submit', (e) => {
+    const parsed = parseARS(altaFmt.value);
+    if (!parsed) {
+      e.preventDefault();
+      alert('Ingresá un monto válido.');
+      return false;
+    }
+    altaRaw.value = parsed; // lo que espera el backend
+  });
+  altaFmt.addEventListener('blur', () => {
+    const p = parseARS(altaFmt.value);
+    if (p) altaFmt.value = formatARS(Number(p));
+  });
+
+  // ---------- Render inicial de montos del historial ----------
+  document.querySelectorAll('.monto-view').forEach(span => {
+    const v = Number(span.dataset.monto || 0);
+    span.textContent = formatARS(v);
+  });
+  // Pre-cargar valor formateado en inputs de edición
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const montoSpan = tr.querySelector('.monto-view');
+    const v = Number(montoSpan?.dataset?.monto || 0);
+    const inputFmt = tr.querySelector('.monto-fmt');
+    if (inputFmt) inputFmt.value = formatARS(v);
+  });
+  // Normalizar al salir del input de edición
+  document.querySelectorAll('.monto-fmt').forEach(inp => {
+    inp.addEventListener('blur', () => {
+      const p = parseARS(inp.value);
+      if (p !== '') inp.value = formatARS(Number(p));
+    });
+  });
+
+  // ---------- Modo edición por fila ----------
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const btnEditar   = tr.querySelector('.btn-editar');
+    const btnGuardar  = tr.querySelector('.btn-guardar');
+    const btnCancelar = tr.querySelector('.btn-cancelar');
+    const editForms   = tr.querySelectorAll('.edit-form');
+    const viewSpans   = tr.querySelectorAll('.desc-view, .monto-view');
+
+    function setEdit(on) {
+      editForms.forEach(f => f.classList.toggle('hidden', !on));
+      viewSpans.forEach(s => s.classList.toggle('hidden', on));
+      btnEditar.classList.toggle('hidden', on);
+      btnGuardar.classList.toggle('hidden', !on);
+      btnCancelar.classList.toggle('hidden', !on);
+      if (on) {
+        // focus en primer campo
+        const first = tr.querySelector('.edit-form input[type="text"]');
+        first && first.focus();
+      }
+    }
+
+    // atajos de teclado en edición
+    tr.addEventListener('keydown', (ev) => {
+      if (!btnGuardar.classList.contains('hidden')) {
+        if (ev.key === 'Enter') { ev.preventDefault(); btnGuardar.click(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); btnCancelar.click(); }
+      }
+    });
+
+    btnEditar?.addEventListener('click', () => setEdit(true));
+    btnCancelar?.addEventListener('click', () => setEdit(false));
+
+    btnGuardar?.addEventListener('click', () => {
+      // Pasar el monto formateado al hidden 'monto'
+      const forms = tr.querySelectorAll('form.edit-form');
+      let ok = true;
+
+      forms.forEach(f => {
+        const fmt = f.querySelector('.monto-fmt');
+        const raw = f.querySelector('.monto-raw');
+        if (fmt && raw) {
+          const parsed = parseARS(fmt.value);
+          if (parsed === '') { ok = false; alert('Ingresá un monto válido.'); return; }
+          raw.value = parsed;
+        }
+      });
+
+      if (ok) {
+        // Unificamos en un solo POST (el de la descripción), agregando 'monto' si está
+        const fd = new FormData(forms[0]); // desc
+        if (forms[1]) {
+          const id2  = forms[1].querySelector('input[name="id"]')?.value;
+          const raw2 = forms[1].querySelector('input[name="monto"]')?.value;
+          if (id2)  fd.set('id', id2);
+          if (raw2 !== null) fd.set('monto', raw2);
+        }
+        btnGuardar.disabled = true;
+        fetch(forms[0].action, { method:'POST', body: fd })
+          .then(() => location.reload())
+          .catch(() => location.reload());
+      }
+    });
+  });
+</script>
+</body>
+</html>

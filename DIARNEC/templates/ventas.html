@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>{% if venta is defined %}Editar venta #{{ venta['id'] }}{% else %}Ventas{% endif %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{--azul:#0d6efd;}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;max-width:1100px;margin:24px auto;padding:0 16px;background:#fff}
+    h1{margin:0 0 16px}
+    .flash{background:#fff3cd;border:1px solid #ffeeba;padding:8px 12px;border-radius:8px;margin:12px 0}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{border:1px solid #ddd;padding:8px;vertical-align:middle}
+    th{background:#f7f7f7;text-align:left}
+    .row-actions{display:flex;gap:8px;justify-content:center}
+    button,input,select{padding:8px;border:1px solid #ccc;border-radius:6px}
+    .primary{background:var(--azul);color:#fff;border-color:var(--azul);cursor:pointer}
+    .success{background:#198754;color:#fff;border-color:#198754;cursor:pointer}
+    .secondary{background:#6c757d;color:#fff;border-color:#6c757d;cursor:pointer;text-decoration:none;display:inline-block}
+    .danger{background:#dc3545;color:#fff;border-color:#dc3545;cursor:pointer}
+    .actions{margin-top:16px;display:flex;gap:12px;flex-wrap:wrap}
+    .right{text-align:right}
+    .w-100{width:100%}
+    .max-420{max-width:420px}
+    .kpis{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+    .kpi{background:#f8f9fa;border:1px solid #e9ecef;border-radius:10px;padding:10px 12px}
+    .kpi .v{font-weight:700}
+    .muted{color:#6c757d;font-size:12px}
+    .table-sm th,.table-sm td{padding:6px}
+    .btn-link{background:transparent;border:0;color:var(--azul);cursor:pointer;text-decoration:underline;padding:0}
+    .back-top-right{
+      position:fixed; top:16px; right:16px;
+      background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px;
+      padding:8px 12px; color:#0d6efd; text-decoration:none;
+    }
+  </style>
+</head>
+<body>
+  <a class="back-top-right" href="{{ url_for('dashboard') }}">⬅ Volver al Dashboard</a>
+
+  <h1>{% if venta is defined %}Editar venta #{{ venta['id'] }}{% else %}Registrar venta{% endif %}</h1>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form id="form-venta" method="POST" action="{{ url_for('ventas') }}">
+    <!-- Vendedor -->
+    <label for="vendedorSel"><strong>Vendedor</strong></label><br>
+    <select id="vendedorSel" name="vendedor_id" class="w-100 max-420" required>
+      <option value="" disabled selected>Elegí un vendedor</option>
+      {% for v in vendedores %}
+        <option
+          value="{{ v['id'] }}"
+          data-comision="{{ (v['comision'] or 0)|float }}"
+          data-tel="{{ (v['telefono'] or '') }}"
+        >
+          {{ v['nombre'] }}
+        </option>
+      {% endfor %}
+    </select>
+    <div class="muted">La comisión base del vendedor se usa si no hay regla por marca.</div>
+
+    <input type="hidden" name="venta_nombre" id="ventaNombre" value="">
+
+    <div class="kpis">
+      <div class="kpi">Comisión base vendedor: <span class="v" id="kpiComBase">0%</span></div>
+      <div class="kpi">Total bruto: <span class="v" id="kpiBruto">$ 0,00</span></div>
+      <div class="kpi">Total comisión: <span class="v" id="kpiDesc">$ 0,00</span></div>
+      <div class="kpi">Total neto: <span class="v" id="kpiNeto">$ 0,00</span></div>
+    </div>
+
+    <table id="tabla-items">
+      <thead>
+        <tr>
+          <th style="width:30%">Producto</th>
+          <th style="width:14%">Marca</th>
+          <th style="width:10%">Cantidad</th>
+          <th style="width:12%">Precio unit.</th>
+          <th style="width:10%">% Com.</th>
+          <th style="width:10%">Subtotal</th>
+          <th style="width:7%">Dto.</th>
+          <th style="width:12%">Neto</th>
+          <th style="width:5%"></th>
+        </tr>
+      </thead>
+      <tbody id="items-body">
+        <tr data-pct-auto="1">
+          <td>
+            <select name="producto[]" class="prod w-100" required>
+              <option value="" disabled selected>Elegí un producto</option>
+              {% for p in productos %}
+                <option
+                  value="{{ p['id'] }}"
+                  data-precio="{{ '%.2f'|format(p['precio'] or 0) }}"
+                  data-marca="{{ (p['marca'] or '')|upper }}"
+                  data-nombre="{{ p['nombre'] }}"
+                >
+                  {{ p['nombre'] }}
+                </option>
+              {% endfor %}
+            </select>
+          </td>
+          <td class="marca">—</td>
+          <td><input type="number" name="cantidad[]" class="cant w-100" min="1" value="1" required></td>
+          <td><input type="number" step="0.01" name="precio[]" class="precio w-100" min="0" value="" required></td>
+          <!-- IMPORTANTE: dejamos value vacío y usamos placeholder para el % auto -->
+          <td><input type="number" step="0.01" min="0" name="pct[]" class="pct w-100 right" placeholder="auto"></td>
+          <td class="subtotal right">$ 0,00</td>
+          <td class="desc right">$ 0,00</td>
+          <td class="neto right">$ 0,00</td>
+          <td class="row-actions"><button type="button" class="danger" onclick="eliminarFila(this)">✕</button></td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="5" class="right">TOTAL</th>
+          <th id="tBruto" class="right">$ 0,00</th>
+          <th id="tDesc" class="right">$ 0,00</th>
+          <th id="tNeto" class="right">$ 0,00</th>
+          <th></th>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="muted" style="margin-top:6px">
+      Podés editar el % de comisión por ítem. Si lo dejás vacío, se calcula automáticamente según vendedor y marca.
+    </div>
+
+    <div class="actions">
+      <button type="button" onclick="agregarFila()">Agregar ítem +</button>
+      <button type="submit" class="primary">Registrar venta</button>
+      <button type="button" class="secondary" id="btnLimpiar">Limpiar venta</button>
+      <button type="button" class="secondary" id="btnExcel">Exportar a Excel</button>
+      <button type="button" class="success" id="btnWhats">Enviar por WhatsApp</button>
+    </div>
+  </form>
+
+  <!-- Historial -->
+  <div class="hist">
+    <h2>Historial de ventas recientes</h2>
+    {% if ventas_recientes and ventas_recientes|length > 0 %}
+      <table class="table-sm">
+        <thead>
+          <tr>
+            <th style="width:10%">#</th>
+            <th style="width:35%">Vendedor</th>
+            <th style="width:20%">Fecha</th>
+            <th style="width:20%" class="right">Total</th>
+            <th style="width:15%">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in ventas_recientes %}
+          <tr data-vendedor-nombre="{{ v['cliente']|trim }}">
+            <td>Venta {{ v['id'] }}</td>
+            <td>{{ v['cliente'] }}</td>
+            <td>{{ v['fecha'] }}</td>
+            <td class="right">$ {{ '%.2f'|format(v['total'] or 0) }}</td>
+            <td class="row-actions">
+              <a class="primary" href="{{ url_for('descargar_factura', venta_id=v['id']) }}">PDF</a>
+              <button class="btn-link btnCargarVendedor" type="button">Cargar vendedor</button>
+              <form method="POST" action="{{ url_for('ventas_delete', venta_id=v['id']) }}" onsubmit="return confirm('¿Eliminar la venta {{ v['id'] }}? Esta acción no se puede deshacer.');" style="display:inline">
+                <button type="submit" class="danger">Borrar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="muted">Aún no hay ventas registradas.</div>
+    {% endif %}
+  </div>
+
+<!-- Datos para JS (mapa de comisiones vendedor+marca) -->
+<script>
+  const COMISIONES = [
+    {% if comisiones is defined %}
+      {% for c in comisiones %}
+        {"vendedor_id": {{ c['vendedor_id'] }}, "marca": {{ (c['marca'] or '')|upper|tojson }}, "comision_pct": {{ (c['comision_pct'] or 0)|float }} }{{ "," if not loop.last }}
+      {% endfor %}
+    {% endif %}
+  ];
+</script>
+
+<script>
+function $(q,ctx=document){return ctx.querySelector(q)}
+function $$(q,ctx=document){return Array.from(ctx.querySelectorAll(q))}
+const fmt = n => "$ " + (Number(n||0).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g,".");
+
+function mapearComisiones(){
+  const map = {};
+  (COMISIONES||[]).forEach(c=>{
+    const v = String(c.vendedor_id);
+    const m = String(c.marca||'').toUpperCase();
+    if(!map[v]) map[v] = {};
+    map[v][m] = Number(c.comision_pct||0);
+  });
+  return map;
+}
+const MAP_COMI = mapearComisiones();
+
+function comisionPara(vendedorId, marca, comBase){
+  const v = String(vendedorId||'');
+  const m = String(marca||'').toUpperCase().trim();
+  if (MAP_COMI[v] && MAP_COMI[v][m] != null) return Number(MAP_COMI[v][m]);
+  return Number(comBase||0);
+}
+
+function vendedorActual(){
+  const sel = $('#vendedorSel');
+  const id = sel.value || null;
+  const opt = sel.selectedOptions[0];
+  const base = Number(opt?.dataset?.comision || 0);
+  const tel  = (opt?.dataset?.tel || '').replace(/\D/g,'');
+  const nombre = opt ? opt.textContent.trim() : '';
+  return {id, base, tel, nombre};
+}
+
+function armarNombreVenta(){
+  const {nombre} = vendedorActual();
+  const f = new Date();
+  const y=f.getFullYear(), m=String(f.getMonth()+1).padStart(2,'0'), d=String(f.getDate()).padStart(2,'0');
+  $('#ventaNombre').value = `venta_${y}-${m}-${d}_${nombre||'Vendedor'}`.replace(/\s+/g,'_');
+}
+
+function setPctAutoPlaceholder(tr){
+  const marca = tr.querySelector(".marca").textContent || "";
+  const {id: vendId, base} = vendedorActual();
+  const pctAuto = comisionPara(vendId, marca, base).toFixed(2);
+  const pctInput = tr.querySelector(".pct");
+  if (tr.dataset.pctAuto !== "0") {
+    pctInput.value = "";                // no enviar valor si es auto
+    pctInput.placeholder = pctAuto;     // mostrar el % auto
+  }
+}
+
+function onProductoChange(sel){
+  const tr = sel.closest("tr");
+  const opt = sel.selectedOptions[0];
+  const precio = opt?.getAttribute("data-precio") || "0";
+  const marca  = opt?.getAttribute("data-marca")  || "";
+  const precioInput = tr.querySelector(".precio");
+  if (!precioInput.value) { precioInput.value = precio; }
+  tr.querySelector(".marca").textContent = (marca || "—");
+  setPctAutoPlaceholder(tr);
+  recalcularFila(tr);
+}
+
+function leerPct(tr, marca){
+  const {id: vendId, base} = vendedorActual();
+  const inp = tr.querySelector(".pct");
+  const val = inp.value;
+  const n = parseFloat(val);
+  if (isFinite(n)) return n;
+  // si no hay valor, usar regla auto
+  return comisionPara(vendId, marca, base);
+}
+
+function recalcularFila(tr){
+  const cant = parseFloat(tr.querySelector(".cant").value || 0);
+  const precio = parseFloat(tr.querySelector(".precio").value || 0);
+  const marca = tr.querySelector(".marca").textContent || "";
+  const pct = leerPct(tr, marca);
+
+  const sub = cant * precio;
+  const desc = sub * (pct/100);
+  const neto = sub - desc;
+
+  tr.querySelector(".subtotal").textContent = fmt(sub);
+  tr.querySelector(".desc").textContent     = fmt(desc);
+  tr.querySelector(".neto").textContent     = fmt(neto);
+
+  tr.dataset.bruto=sub; tr.dataset.desc=desc; tr.dataset.neto=neto;
+
+  recalcularTotal();
+}
+
+function recalcularTotal(){
+  let b=0,d=0,n=0;
+  $$("#items-body tr").forEach(tr=>{
+    b += Number(tr.dataset.bruto||0);
+    d += Number(tr.dataset.desc||0);
+    n += Number(tr.dataset.neto||0);
+  });
+  $("#tBruto").textContent = fmt(b);
+  $("#tDesc").textContent  = fmt(d);
+  $("#tNeto").textContent  = fmt(n);
+  $("#kpiBruto").textContent = fmt(b);
+  $("#kpiDesc").textContent  = fmt(d);
+  $("#kpiNeto").textContent  = fmt(n);
+}
+
+function agregarFila(){
+  const tbody = $("#items-body");
+  const tr0 = tbody.querySelector("tr");
+  const opciones = tr0.querySelector("select.prod").innerHTML;
+  const tr = document.createElement("tr");
+  tr.setAttribute("data-pct-auto","1");
+  tr.innerHTML = `
+    <td><select name="producto[]" class="prod w-100" required>${opciones}</select></td>
+    <td class="marca">—</td>
+    <td><input type="number" name="cantidad[]" class="cant w-100" min="1" value="1" required></td>
+    <td><input type="number" step="0.01" name="precio[]" class="precio w-100" min="0" value="" required></td>
+    <td><input type="number" step="0.01" min="0" name="pct[]" class="pct w-100 right" placeholder="auto"></td>
+    <td class="subtotal right">$ 0,00</td>
+    <td class="desc right">$ 0,00</td>
+    <td class="neto right">$ 0,00</td>
+    <td class="row-actions"><button type="button" class="danger" onclick="eliminarFila(this)">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+  wireRow(tr);
+}
+
+function eliminarFila(btn){
+  btn.closest("tr").remove();
+  recalcularTotal();
+}
+
+function wireRow(tr){
+  tr.querySelector(".cant").addEventListener("input", ()=>recalcularFila(tr));
+  tr.querySelector(".precio").addEventListener("input", ()=>recalcularFila(tr));
+  tr.querySelector(".pct").addEventListener("input", ()=>{
+    tr.dataset.pctAuto = "0"; // ahora es manual
+    recalcularFila(tr);
+  });
+  tr.querySelector(".prod").addEventListener("change", (e)=>onProductoChange(e.target));
+}
+
+// Inicializar
+document.querySelectorAll("#items-body tr").forEach(wireRow);
+
+$("#vendedorSel").addEventListener("change", ()=>{
+  const {base} = vendedorActual();
+  $("#kpiComBase").textContent = (Number(base)||0).toFixed(2) + "%";
+  $$("#items-body tr").forEach(tr=>{
+    setPctAutoPlaceholder(tr);
+    recalcularFila(tr);
+  });
+  armarNombreVenta();
+});
+armarNombreVenta();
+
+// Exportar CSV
+$("#btnExcel").addEventListener("click", ()=>{
+  const {nombre} = vendedorActual();
+  let csv = ["Producto,Marca,Cantidad,Precio,Comision%,Subtotal,Descuento,Neto"];
+  $$("#items-body tr").forEach(tr=>{
+    const prodSel = tr.querySelector("select.prod");
+    const prodTxt = prodSel.selectedOptions[0]?.getAttribute("data-nombre") || prodSel.selectedOptions[0]?.textContent || "";
+    const marca = tr.querySelector(".marca").textContent || "";
+    const cant = tr.querySelector(".cant").value || "0";
+    const precio = tr.querySelector(".precio").value || "0";
+    const pct = tr.querySelector(".pct").value || tr.querySelector(".pct").placeholder || ""; // mostrar auto si no hay manual
+    const sub = Number(tr.dataset.bruto||0).toFixed(2);
+    const des = Number(tr.dataset.desc||0).toFixed(2);
+    const net = Number(tr.dataset.neto||0).toFixed(2);
+    csv.push([prodTxt,marca,cant,precio,pct,sub,des,net].join(","));
+  });
+  const blob = new Blob([csv.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const f = new Date(); const y=f.getFullYear(), m=String(f.getMonth()+1).padStart(2,'0'), d=String(f.getDate()).padStart(2,'0');
+  const nombreArchivo = `venta_${y}-${m}-${d}_${(nombre||'Vendedor').replace(/\s+/g,'_')}.csv`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+// WhatsApp
+$("#btnWhats").addEventListener("click", ()=>{
+  const {tel, nombre} = vendedorActual();
+  if(!$("#vendedorSel").value){ alert("Elegí un vendedor"); return; }
+  let msg = `VENTA ${new Date().toLocaleDateString()} - ${nombre}\n\n`;
+  $$("#items-body tr").forEach(tr=>{
+    const prodSel = tr.querySelector("select.prod");
+    const prodTxt = prodSel.selectedOptions[0]?.getAttribute("data-nombre") || prodSel.selectedOptions[0]?.textContent || "";
+    const marca = tr.querySelector(".marca").textContent || "";
+    const cant = tr.querySelector(".cant").value || "0";
+    const precio = Number(tr.querySelector(".precio").value||0).toFixed(2);
+    const pct = tr.querySelector(".pct").value || tr.querySelector(".pct").placeholder || "auto";
+    const sub = Number(tr.dataset.bruto||0).toFixed(2);
+    const net = Number(tr.dataset.neto||0).toFixed(2);
+    msg += `• ${prodTxt} (${marca}) x${cant} @ $${precio} | com ${pct}% → neto $${net} (sub $${sub})\n`;
+  });
+  msg += `\nTOTAL NETO: ${$("#kpiNeto").textContent}`;
+  const phone = tel ? tel : "";
+  const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+                    : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url, "_blank");
+});
+
+// Limpiar venta
+$("#btnLimpiar").addEventListener("click", ()=>{
+  $("#vendedorSel").selectedIndex = 0;
+  $("#kpiComBase").textContent = "0%";
+  const tbody = $("#items-body");
+  const opciones = document.querySelector("select.prod") ? document.querySelector("select.prod").innerHTML : '<option value="" disabled selected>Elegí un producto</option>';
+  tbody.innerHTML = `
+    <tr data-pct-auto="1">
+      <td><select name="producto[]" class="prod w-100" required>${opciones}</select></td>
+      <td class="marca">—</td>
+      <td><input type="number" name="cantidad[]" class="cant w-100" min="1" value="1" required></td>
+      <td><input type="number" step="0.01" name="precio[]" class="precio w-100" min="0" value="" required></td>
+      <td><input type="number" step="0.01" min="0" name="pct[]" class="pct w-100 right" placeholder="auto"></td>
+      <td class="subtotal right">$ 0,00</td>
+      <td class="desc right">$ 0,00</td>
+      <td class="neto right">$ 0,00</td>
+      <td class="row-actions"><button type="button" class="danger" onclick="eliminarFila(this)">✕</button></td>
+    </tr>
+  `;
+  wireRow($("#items-body tr"));
+  recalcularTotal();
+  armarNombreVenta();
+  $("#vendedorSel").focus();
+});
+
+// Cargar vendedor desde historial
+$$(".btnCargarVendedor").forEach(btn=>{
+  btn.addEventListener("click", (e)=>{
+    const tr = e.target.closest("tr");
+    const nombre = tr?.dataset?.vendedorNombre?.trim() || "";
+    if(!nombre) return;
+    const sel = $("#vendedorSel");
+    const opts = Array.from(sel.options);
+    const found = opts.find(o => o.textContent.trim().toLowerCase() === nombre.toLowerCase());
+    if(found){
+      sel.value = found.value;
+      sel.dispatchEvent(new Event('change'));
+      window.scrollTo({top:0, behavior:'smooth'});
+    }else{
+      alert("No encontré ese vendedor en la lista.");
+    }
+  });
+});
+
+// Validación de envío
+$("#form-venta").addEventListener("submit", (e)=>{
+  if(!$("#vendedorSel").value){
+    e.preventDefault(); alert("Elegí un vendedor"); return false;
+  }
+  if($$("#items-body tr").length===0){
+    e.preventDefault(); alert("Agregá al menos un ítem"); return false;
+  }
+  armarNombreVenta();
+});
+</script>
+</body>
+</html>

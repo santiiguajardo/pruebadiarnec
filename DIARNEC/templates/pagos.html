@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pagos a Vendedores</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    .hidden { display: none; }
+    .w-120 { width: 120px; }
+    .w-160 { width: 160px; }
+  </style>
+</head>
+<body>
+<div class="container mt-5">
+  <h1>Pagos a Vendedores</h1>
+
+  <!-- Alta de pago -->
+  <form method="POST" class="mb-4" action="{{ url_for('pagos') }}">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Vendedor</label>
+        <select name="vendedor_id" class="form-select" required>
+          <option value="">-- Elegí vendedor --</option>
+          {% for v in vendedores %}
+            <option value="{{ v['id'] }}">{{ v['nombre'] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Medio</label>
+        <select name="medio_pago" class="form-select" required>
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Monto (AR$)</label>
+        <input type="number" step="0.01" min="0.01" name="monto" class="form-control" required />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Fecha</label>
+        <input type="date" name="fecha" class="form-control" value="{{ hoy }}" />
+      </div>
+      <div class="col-12">
+        <label class="form-label">Descripción</label>
+        <input type="text" name="descripcion" class="form-control" placeholder="Detalle opcional" />
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-success">Registrar Pago</button>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-link">Volver al Dashboard</a>
+      </div>
+    </div>
+  </form>
+
+  <!-- Historial -->
+  <h2>Historial</h2>
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th class="w-120">Fecha</th>
+        <th>Vendedor</th>
+        <th class="w-160">Medio</th>
+        <th class="w-120">Monto</th>
+        <th>Descripción</th>
+        <th class="text-end">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pagos %}
+      <tr>
+        <!-- Vista -->
+        <td class="view">{{ p['fecha'] }}</td>
+        <td class="view">{{ p['vendedor'] }}</td>
+        <td class="view text-capitalize">{{ p['medio_pago'] or 'efectivo' }}</td>
+        <td class="view">AR$ {{ '%.2f'|format(p['monto'] or 0) }}</td>
+        <td class="view">{{ p['descripcion'] }}</td>
+        <td class="view text-end">
+          <button class="btn btn-sm btn-outline-primary" type="button" onclick="toggleEdit(this)">Editar</button>
+          <form method="POST" action="{{ url_for('pagos_delete') }}" class="d-inline">
+            <input type="hidden" name="id" value="{{ p['id'] }}" />
+            <button class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar este pago?')">Eliminar</button>
+          </form>
+        </td>
+
+        <!-- Edición (misma fila, usando colspan) -->
+        <td colspan="6" class="edit hidden">
+          <form class="row g-2 align-items-end" method="POST" action="{{ url_for('pagos_update') }}">
+            <input type="hidden" name="id" value="{{ p['id'] }}" />
+            <div class="col-md-2">
+              <label class="form-label">Fecha</label>
+              <input type="date" name="fecha" value="{{ p['fecha'] }}" class="form-control" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Vendedor</label>
+              <select name="vendedor_id" class="form-select">
+                <option value="">(sin cambio)</option>
+                {% for v in vendedores %}
+                  <option value="{{ v['id'] }}" {% if v['id']==p['vendedor_id'] %}selected{% endif %}>
+                    {{ v['nombre'] }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Medio</label>
+              <select name="medio_pago" class="form-select">
+                <option value="">(sin cambio)</option>
+                <option value="efectivo" {% if p['medio_pago']=='efectivo' %}selected{% endif %}>Efectivo</option>
+                <option value="transferencia" {% if p['medio_pago']=='transferencia' %}selected{% endif %}>Transferencia</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Monto</label>
+              <input type="number" step="0.01" name="monto" value="{{ p['monto'] }}" class="form-control" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Descripción</label>
+              <input type="text" name="descripcion" value="{{ p['descripcion'] }}" class="form-control" />
+            </div>
+            <div class="col-12 text-end">
+              <button class="btn btn-sm btn-secondary" type="button" onclick="toggleEdit(this)">Cancelar</button>
+              <button class="btn btn-sm btn-primary">Guardar</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  function toggleEdit(btn) {
+    const tr = btn.closest('tr');
+    const viewCells = tr.querySelectorAll('.view');
+    const editCell = tr.querySelector('.edit');
+    if (!editCell) return;
+    viewCells.forEach(td => td.classList.toggle('hidden'));
+    editCell.classList.toggle('hidden');
+  }
+</script>
+</body>
+</html>

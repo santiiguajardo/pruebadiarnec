@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Proveedores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="mb-0">Proveedores</h1>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-dark">Ir a menú</a>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="alert alert-warning">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="mb-4">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Proveedor</label>
+        <input type="text" name="proveedor" class="form-control" placeholder="Nombre del proveedor" required>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Fecha</label>
+        <input type="date" name="fecha" class="form-control" value="{{ hoy }}" required>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Medio de pago</label>
+        <select name="medio_pago" id="medio_pago" class="form-select" required>
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="cheque">Cheque</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Monto (bruto)</label>
+        <input type="number" step="0.01" name="monto_bruto" id="monto_bruto" class="form-control" placeholder="0.00" required>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Comisión cheque (%)</label>
+        <input type="number" step="0.01" name="comision_pct" id="comision_pct" class="form-control" value="0" disabled>
+        <div class="form-text">Se aplica solo si el medio es cheque.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Monto neto</label>
+        <input type="number" step="0.01" id="monto_neto_view" class="form-control" value="0.00" readonly>
+        <div class="form-text">Bruto - comisión.</div>
+      </div>
+
+      <div class="col-md-12">
+        <label class="form-label">Descripción (opcional)</label>
+        <input type="text" name="descripcion" class="form-control" placeholder="Detalle, referencia, etc.">
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <button type="submit" class="btn btn-success">Registrar Pago</button>
+    </div>
+  </form>
+
+  <h2 class="mt-4">Pagos recientes</h2>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Proveedor</th>
+        <th>Medio</th>
+        <th class="text-end">Monto bruto</th>
+        <th class="text-end">Comisión %</th>
+        <th class="text-end">Monto neto</th>
+        <th>Descripción</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for p in pagos %}
+        <tr>
+          <td>{{ p['fecha'] }}</td>
+          <td>{{ p.get('proveedor', '') or p.get('proveedor_id', '') }}</td>
+          <td>{{ p.get('medio_pago', '—') }}</td>
+          <td class="text-end">
+            ${{ '%.2f'|format(p.get('monto_bruto', p.get('monto', 0.0)) or 0.0) }}
+          </td>
+          <td class="text-end">{{ '%.2f'|format(p.get('comision_pct', 0.0) or 0.0) }}%</td>
+          <td class="text-end">
+            ${{ '%.2f'|format(p.get('monto_neto', p.get('monto', 0.0)) or 0.0) }}
+          </td>
+          <td>{{ p.get('descripcion', '') }}</td>
+        </tr>
+      {% endfor %}
+      {% if not pagos %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Sin pagos cargados.</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const medio = document.getElementById('medio_pago');
+const comision = document.getElementById('comision_pct');
+const montoBruto = document.getElementById('monto_bruto');
+const netoView = document.getElementById('monto_neto_view');
+
+function recalc(){
+  const bruto = parseFloat((montoBruto.value || '0').replace(',', '.')) || 0;
+  const pct = (medio.value === 'cheque') ? (parseFloat((comision.value || '0').replace(',', '.')) || 0) : 0;
+  const neto = bruto - (bruto * pct / 100);
+  netoView.value = neto.toFixed(2);
+}
+
+medio.addEventListener('change', () => {
+  const isCheque = medio.value === 'cheque';
+  comision.disabled = !isCheque;
+  if (!isCheque) comision.value = 0;
+  recalc();
+});
+montoBruto.addEventListener('input', recalc);
+comision.addEventListener('input', recalc);
+window.addEventListener('DOMContentLoaded', recalc);
+</script>
+</body>
+</html>

@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Bonificaciones</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background:#fff; }
+    .table thead th { white-space: nowrap; }
+    .number { text-align: end; }
+    .row-actions .btn { padding: .25rem .5rem; }
+    .totals .card-body { font-size: 1.05rem; }
+    .totals .value { font-weight: 700; }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-light bg-light border-bottom">
+  <div class="container-fluid">
+    <span class="navbar-brand"><i class="bi bi-gift"></i> Bonificaciones</span>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+  </div>
+</nav>
+
+<div class="container my-4">
+  {% with messages = get_flashed_messages() %}{% if messages %}
+    {% for m in messages %}<div class="alert alert-info">{{ m }}</div>{% endfor %}
+  {% endif %}{% endwith %}
+
+  <!-- Alta de bonificación -->
+  <div class="card mb-4">
+    <div class="card-header">Nueva bonificación</div>
+    <form id="form-boni" method="POST" action="{{ url_for('bonificaciones') }}">
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label">Vendedor</label>
+            <select name="vendedor_id" id="vendedor" class="form-select" required>
+              <option value="" disabled selected>Elegí un vendedor</option>
+              {% for v in vendedores %}
+                <option value="{{ v['id'] }}" data-comision="{{ '%.4f'|format((v['comision'] or 0)) }}">
+                  {{ v['nombre'] }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fecha</label>
+            <input type="date" class="form-control" name="fecha" value="{{ hoy }}">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Descripción</label>
+            <input type="text" class="form-control" name="descripcion" placeholder="Ej: Bonificación por récord semanal">
+          </div>
+        </div>
+
+        <hr class="my-4">
+
+        <!-- Items -->
+        <div class="table-responsive">
+          <table class="table align-middle" id="tabla-items">
+            <thead>
+              <tr>
+                <th style="width:38%">Producto</th>
+                <th>Marca</th>
+                <th class="text-end" style="width:10%">Cant.</th>
+                <th class="text-end" style="width:16%">Precio</th>
+                <th class="text-end" style="width:10%">% Com.</th>
+                <th class="text-end" style="width:16%">Subtotal</th>
+                <th class="text-end" style="width:4%"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary" id="btn-add"><i class="bi bi-plus-circle"></i> Agregar renglón</button>
+
+        <!-- Totales -->
+        <div class="row g-3 mt-4 totals">
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body d-flex justify-content-between">
+                <span>Total bruto</span>
+                <span class="value" id="tBruto">$ 0,00</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body d-flex justify-content-between">
+                <span>Comisión aplicada</span>
+                <span class="value" id="tComision">$ 0,00</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 bg-light">
+              <div class="card-body d-flex justify-content-between">
+                <span>Total bonificado (neto)</span>
+                <span class="value" id="tNeto">$ 0,00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <input type="hidden" name="monto" id="montoNeto" value="0">
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        <button class="btn btn-success"><i class="bi bi-check2-circle"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Listado con edición inline -->
+  <div class="card">
+    <div class="card-header">Bonificaciones registradas</div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Fecha</th>
+            <th>Vendedor</th>
+            <th>Descripción</th>
+            <th class="text-end">Monto</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bonificaciones %}
+            <tr data-id="{{ b['id'] }}">
+              <td>{{ b['id'] }}</td>
+
+              <!-- FECHA -->
+              <td>
+                <span class="view">{{ b['fecha'] }}</span>
+                <form class="edit hidden" method="POST" action="{{ url_for('bonificaciones_update') }}">
+                  <input type="hidden" name="id" value="{{ b['id'] }}">
+                  <input type="date" class="form-control form-control-sm" name="fecha" value="{{ b['fecha'] }}">
+                </form>
+              </td>
+
+              <!-- VENDEDOR -->
+              <td>
+                <span class="view">{{ b['vendedor'] }}</span>
+                <form class="edit hidden" method="POST" action="{{ url_for('bonificaciones_update') }}">
+                  <input type="hidden" name="id" value="{{ b['id'] }}">
+                  <select name="vendedor_id" class="form-select form-select-sm">
+                    {% for v in vendedores %}
+                      <option value="{{ v['id'] }}" {{ 'selected' if v['id']==b['vendedor_id'] else '' }}>{{ v['nombre'] }}</option>
+                    {% endfor %}
+                  </select>
+                </form>
+              </td>
+
+              <!-- DESCRIPCIÓN -->
+              <td>
+                <span class="view">{{ b['descripcion'] or '' }}</span>
+                <form class="edit hidden" method="POST" action="{{ url_for('bonificaciones_update') }}">
+                  <input type="hidden" name="id" value="{{ b['id'] }}">
+                  <input type="text" class="form-control form-control-sm" name="descripcion" value="{{ b['descripcion'] or '' }}">
+                </form>
+              </td>
+
+              <!-- MONTO -->
+              <td class="text-end">
+                <span class="view monto" data-monto="{{ b['monto'] or 0 }}"></span>
+                <form class="edit hidden" method="POST" action="{{ url_for('bonificaciones_update') }}">
+                  <input type="hidden" name="id" value="{{ b['id'] }}">
+                  <div class="input-group input-group-sm">
+                    <input type="text" class="form-control text-end monto-fmt" value="" placeholder="$ 0,00" inputmode="decimal">
+                  </div>
+                  <input type="hidden" name="monto" class="monto-raw" value="">
+                </form>
+              </td>
+
+              <!-- ACCIONES -->
+              <td class="text-end">
+                <button type="button" class="btn btn-sm btn-outline-primary btn-editar"><i class="bi bi-pencil-square"></i></button>
+                <form class="d-inline" method="POST" action="{{ url_for('bonificaciones_delete') }}"
+      onsubmit="return confirm('¿Eliminar esta bonificación?');">
+  <input type="hidden" name="id" value="{{ b['id'] }}">
+  <button type="submit" class="btn btn-sm btn-outline-danger">
+    <i class="bi bi-trash"></i>
+  </button>
+</form>
+
+                <button type="button" class="btn btn-sm btn-primary btn-guardar hidden"><i class="bi bi-check2"></i></button>
+                <button type="button" class="btn btn-sm btn-secondary btn-cancelar hidden"><i class="bi bi-x-lg"></i></button>
+              </td>
+            </tr>
+          {% endfor %}
+          {% if not bonificaciones %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Aún no cargaste bonificaciones.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Datos para JS -->
+<script>
+  const PRODUCTOS = [
+    {% for p in (productos or []) %}
+      {"id": {{ p['id'] }}, "nombre": {{ (p['nombre'] or '')|tojson }}, "marca": {{ (p['marca'] or '')|tojson }}, "precio_venta": {{ (p['precio_venta'] or 0)|float }} }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+  const COMISIONES = [
+    {% for c in (comisiones or []) %}
+      {"vendedor_id": {{ c['vendedor_id'] }}, "marca": {{ (c['marca'] or '')|tojson }}, "comision_pct": {{ (c['comision_pct'] or 0)|float }} }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+  const VENDEDORES = [
+    {% for v in vendedores %}
+      {"id": {{ v['id'] }}, "nombre": {{ v['nombre']|tojson }}, "comision": {{ (v['comision'] or 0)|float }} }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+</script>
+
+<script>
+  const fmtARS = v => (Number(v||0)).toLocaleString('es-AR',{style:'currency',currency:'ARS'});
+  function parseARS(text) {
+    if (!text) return '';
+    let s = (text + '').replace(/[^\d,.-]/g, '');
+    s = s.replace(/\./g, '').replace(',', '.');
+    return s;
+  }
+
+  const $ = (q,ctx=document)=>ctx.querySelector(q);
+  const $$ = (q,ctx=document)=>Array.from(ctx.querySelectorAll(q));
+
+  const mapProd = new Map(PRODUCTOS.map(p=>[String(p.id), p]));
+  const defComisionVend = new Map(VENDEDORES.map(v=>[String(v.id), Number(v.comision||0)]));
+  const mapVendMarca = {};
+  COMISIONES.forEach(c=>{
+    const v = String(c.vendedor_id);
+    const m = (c.marca||'').toUpperCase().trim();
+    if(!mapVendMarca[v]) mapVendMarca[v]={};
+    mapVendMarca[v][m]=Number(c.comision_pct||0);
+  });
+  const pctComision = (vendId, marca)=>{
+    const m = (marca||'').toUpperCase().trim();
+    const v = String(vendId||'');
+    if(mapVendMarca[v] && mapVendMarca[v][m] != null) return Number(mapVendMarca[v][m]);
+    return Number(defComisionVend.get(v) || 0);
+  };
+
+  const tbody = document.querySelector('#tabla-items tbody');
+  document.querySelector('#btn-add').addEventListener('click', addRow);
+
+  function addRow(){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select class="form-select form-select-sm sel-prod">
+          <option value="" disabled selected>Elegí un producto</option>
+          ${PRODUCTOS.map(p=>`<option value="${p.id}" data-precio="${Number(p.precio_venta||0)}" data-marca="${(p.marca||'').toUpperCase()}">${p.nombre}</option>`).join('')}
+        </select>
+      </td>
+      <td class="marca text-muted">—</td>
+      <td><input type="number" min="1" value="1" class="form-control form-control-sm number qty"></td>
+      <td><input type="number" step="0.01" min="0" value="0" class="form-control form-control-sm number precio"></td>
+      <td class="text-end pct">0</td>
+      <td class="text-end sub">$ 0,00</td>
+      <td class="text-end row-actions"><button type="button" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-lg"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+
+    const sel = $('.sel-prod', tr);
+    const qty = $('.qty', tr);
+    const precio = $('.precio', tr);
+    const del = $('.row-actions button', tr);
+
+    sel.addEventListener('change', ()=>{
+      const opt = sel.selectedOptions[0];
+      const precioSug = Number(opt?.dataset?.precio || 0);
+      const marca = (opt?.dataset?.marca || '').toUpperCase();
+      $('.marca', tr).textContent = marca || '—';
+      precio.value = (precioSug||0).toString();
+      updateRow(tr);
+      updateTotals();
+    });
+    qty.addEventListener('input', ()=>{ updateRow(tr); updateTotals(); });
+    precio.addEventListener('input', ()=>{ updateRow(tr); updateTotals(); });
+    del.addEventListener('click', ()=>{ tr.remove(); updateTotals(); });
+  }
+
+  function updateRow(tr){
+    const vendedorId = $('#vendedor').value;
+    const marca = $('.marca', tr).textContent.trim();
+    const qty = Number($('.qty', tr).value || 0);
+    const precio = Number($('.precio', tr).value || 0);
+    const pct = pctComision(vendedorId, marca);
+    $('.pct', tr).textContent = pct.toFixed(2);
+    const sub = qty * precio;
+    $('.sub', tr).textContent = fmtARS(sub);
+    tr.dataset.subtotal = sub;
+    tr.dataset.pct = pct;
+  }
+
+  $('#vendedor').addEventListener('change', ()=>{
+    $$('#tabla-items tbody tr').forEach(updateRow);
+    updateTotals();
+  });
+
+  function updateTotals(){
+    let bruto=0, comi=0;
+    $$('#tabla-items tbody tr').forEach(tr=>{
+      const sub = Number(tr.dataset.subtotal || 0);
+      const pct = Number(tr.dataset.pct || 0);
+      bruto += sub;
+      comi  += sub * (pct/100);
+    });
+    const neto = Math.max(0, bruto - comi);
+    $('#tBruto').textContent   = fmtARS(bruto);
+    $('#tComision').textContent= fmtARS(comi);
+    $('#tNeto').textContent    = fmtARS(neto);
+    $('#montoNeto').value = neto.toFixed(2);
+  }
+
+  addRow();
+
+  $('#form-boni').addEventListener('submit', (e)=>{
+    if(!$('#vendedor').value){
+      e.preventDefault(); alert('Elegí un vendedor'); return false;
+    }
+    if($$('#tabla-items tbody tr').length===0){
+      e.preventDefault(); alert('Agregá al menos un renglón'); return false;
+    }
+    updateTotals();
+  });
+
+  document.querySelectorAll('.view.monto').forEach(span=>{
+    const v = Number(span.dataset.monto||0);
+    span.textContent = fmtARS(v);
+  });
+  document.querySelectorAll('tr[data-id]').forEach(tr=>{
+    const v = Number($('.view.monto', tr)?.dataset?.monto || 0);
+    const inp = $('.monto-fmt', tr);
+    if (inp) inp.value = fmtARS(v);
+  });
+  document.querySelectorAll('.monto-fmt').forEach(inp=>{
+    inp.addEventListener('blur', ()=>{
+      const p = parseARS(inp.value);
+      if (p !== '') inp.value = fmtARS(Number(p));
+    });
+  });
+
+  document.querySelectorAll('tr[data-id]').forEach(tr=>{
+    const btnEditar   = $('.btn-editar', tr);
+    const btnGuardar  = $('.btn-guardar', tr);
+    const btnCancelar = $('.btn-cancelar', tr);
+    const views = tr.querySelectorAll('.view');
+    const edits = tr.querySelectorAll('form.edit');
+
+    function setEdit(on){
+      views.forEach(v=>v.classList.toggle('hidden', on));
+      edits.forEach(f=>f.classList.toggle('hidden', !on));
+      btnEditar.classList.toggle('hidden', on);
+      btnGuardar.classList.toggle('hidden', !on);
+      btnCancelar.classList.toggle('hidden', !on);
+      if (on) tr.querySelector('form.edit input, form.edit select')?.focus();
+    }
+
+    btnEditar?.addEventListener('click', ()=>setEdit(true));
+    btnCancelar?.addEventListener('click', ()=>setEdit(false));
+
+    btnGuardar?.addEventListener('click', ()=>{
+      const forms = Array.from(edits);
+      forms.forEach(f=>{
+        const fmt = f.querySelector('.monto-fmt');
+        const raw = f.querySelector('.monto-raw');
+        if (fmt && raw) raw.value = parseARS(fmt.value);
+      });
+
+      const fd = new FormData(forms[0]);
+      for (let i=1; i<forms.length; i++){
+        forms[i].querySelectorAll('input,select,textarea').forEach(el=>{
+          if (el.name) fd.set(el.name, el.value);
+        });
+      }
+
+      fetch(forms[0].action, { method:'POST', body: fd })
+        .then(()=>location.reload())
+        .catch(()=>location.reload());
+    });
+
+    tr.addEventListener('keydown', ev=>{
+      if (!btnGuardar.classList.contains('hidden')) {
+        if (ev.key==='Enter'){ ev.preventDefault(); btnGuardar.click(); }
+        if (ev.key==='Escape'){ ev.preventDefault(); btnCancelar.click(); }
+      }
+    });
+  });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

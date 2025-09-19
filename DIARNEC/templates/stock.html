@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ingreso de Stock</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>.right { text-align:right; }</style>
+</head>
+<body>
+<div class="container mt-5">
+  <div class="d-flex align-items-center justify-content-between">
+    <h1 class="mb-3">Ingreso de Stock</h1>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNuevoProducto">
+        Registrar nuevo producto
+      </button>
+      <button class="btn btn-outline-secondary" id="btnModificarProducto" data-bs-toggle="modal" data-bs-target="#modalModificarProducto" disabled>
+        Modificar producto
+      </button>
+      <!-- NUEVO: botón Ir a menú -->
+      <a class="btn btn-outline-dark" href="{{ url_for('dashboard') }}">
+        Ir a menú
+      </a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="alert alert-warning">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Form principal: ingreso de stock -->
+  <form method="POST" class="mb-4" action="{{ url_for('stock') }}">
+    <input type="hidden" name="op" value="ingreso">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Producto</label>
+        <select name="producto_id" id="producto" class="form-select" required>
+          <option value="" disabled selected>Elegí un producto</option>
+          {% for p in productos %}
+            <option
+              value="{{ p['id'] }}"
+              data-marca="{{ p['marca'] if 'marca' in p.keys() else '' }}"
+              data-precioc="{{ ('%.2f'|format(p['precio_compra'])) if 'precio_compra' in p.keys() and p['precio_compra'] is not none else '0.00' }}"
+              data-preciov="{{ ('%.2f'|format(p['precio_venta'])) if 'precio_venta' in p.keys() and p['precio_venta'] is not none else '0.00' }}"
+            >
+              {{ p['nombre'] }}{% if 'marca' in p.keys() and p['marca'] %} — {{ p['marca'] }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Elegí un producto para autocompletar los precios.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Cantidad</label>
+        <input type="number" name="cantidad" class="form-control" min="1" step="1" required>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Fecha de vencimiento (opcional)</label>
+        <input type="date" name="fecha_vencimiento" class="form-control">
+      </div>
+
+      <!-- Precios: solo lectura, se autocompletan al elegir producto -->
+      <div class="col-md-4">
+        <label class="form-label">Precio compra (auto)</label>
+        <input type="number" id="precio_compra_auto" class="form-control" step="0.01" min="0" value="" readonly>
+        <div class="form-text">Se toma del producto. Para cambiar, usá “Modificar producto”.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Precio venta (auto)</label>
+        <input type="number" id="precio_venta_auto" class="form-control" step="0.01" min="0" value="" readonly>
+        <div class="form-text">Se toma del producto. Para cambiar, usá “Modificar producto”.</div>
+      </div>
+    </div>
+
+    <div class="mt-4 d-flex gap-2">
+      <button type="submit" class="btn btn-success">Actualizar Stock</button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-link">Volver al Dashboard</a>
+    </div>
+  </form>
+</div>
+
+<!-- Modal: Nuevo producto -->
+<div class="modal fade" id="modalNuevoProducto" tabindex="-1" aria-labelledby="modalNuevoProductoLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('stock') }}" class="modal-content">
+      <input type="hidden" name="op" value="nuevo">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalNuevoProductoLabel">Registrar nuevo producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Marca</label>
+          <input type="text" name="marca" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Nombre del artículo</label>
+          <input type="text" name="nombre" class="form-control" required>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Precio compra</label>
+            <input type="number" name="precio_compra" class="form-control" step="0.01" min="0" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Precio venta</label>
+            <input type="number" name="precio_venta" class="form-control" step="0.01" min="0" required>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label">Cantidad mínima (opcional)</label>
+          <input type="number" name="cantidad_minima" class="form-control" min="0" step="1" value="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar producto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Modificar producto -->
+<div class="modal fade" id="modalModificarProducto" tabindex="-1" aria-labelledby="modalModificarProductoLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('stock') }}" class="modal-content">
+      <input type="hidden" name="op" value="modificar">
+      <input type="hidden" name="producto_id_mod" id="producto_id_mod">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalModificarProductoLabel">Modificar producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Marca</label>
+          <input type="text" name="marca" id="marca_mod" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Nombre del artículo</label>
+          <input type="text" name="nombre" id="nombre_mod" class="form-control" required>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Precio compra</label>
+            <input type="number" name="precio_compra" id="precio_compra_mod" class="form-control" step="0.01" min="0" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Precio venta</label>
+            <input type="number" name="precio_venta" id="precio_venta_mod" class="form-control" step="0.01" min="0" required>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label">Cantidad mínima (opcional)</label>
+          <input type="number" name="cantidad_minima" id="cantidad_minima_mod" class="form-control" min="0" step="1">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const selProducto = document.getElementById('producto');
+const btnModificar = document.getElementById('btnModificarProducto');
+
+function autopreciosDesdeProducto(){
+  const opt = selProducto.selectedOptions[0];
+  if(!opt){ return; }
+  const pc = parseFloat(opt.getAttribute('data-precioc') || '0');
+  const pv = parseFloat(opt.getAttribute('data-preciov') || '0');
+  document.getElementById('precio_compra_auto').value = isNaN(pc)? '': pc.toFixed(2);
+  document.getElementById('precio_venta_auto').value  = isNaN(pv)? '': pv.toFixed(2);
+}
+
+function habilitarModificar(){
+  btnModificar.disabled = !selProducto.value;
+}
+
+selProducto.addEventListener('change', ()=>{
+  autopreciosDesdeProducto();
+  habilitarModificar();
+});
+
+// Prefill de modal "Modificar producto" con datos del seleccionado
+const modalModificar = document.getElementById('modalModificarProducto');
+modalModificar.addEventListener('show.bs.modal', ()=>{
+  const opt = selProducto.selectedOptions[0];
+  if(!opt){ return; }
+  document.getElementById('producto_id_mod').value = selProducto.value;
+  document.getElementById('marca_mod').value = opt.getAttribute('data-marca') || '';
+  document.getElementById('nombre_mod').value = opt.textContent.trim().split(' — ')[0] || '';
+  document.getElementById('precio_compra_mod').value = opt.getAttribute('data-precioc') || '';
+  document.getElementById('precio_venta_mod').value  = opt.getAttribute('data-preciov') || '';
+  document.getElementById('cantidad_minima_mod').value = '';
+});
+
+// Inicial
+autopreciosDesdeProducto();
+habilitarModificar();
+</script>
+</body>
+</html>

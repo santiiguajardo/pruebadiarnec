@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Vendedores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between flex-wrap">
+    <h1 class="mb-3">Vendedores</h1>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('vendedores_comisiones') }}" class="btn btn-outline-secondary">Comisiones por marca</a>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-link">Ir al menú</a>
+    </div>
+  </div>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}
+        <div class="alert alert-info">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Alta rápida (solo nombre y teléfono) -->
+  <div class="card mb-4">
+    <div class="card-header">Agregar vendedor</div>
+    <form method="POST" action="{{ url_for('vendedores') }}">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label">Nombre</label>
+            <input type="text" name="nombre" class="form-control" required>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Teléfono</label>
+            <input type="text" name="telefono" class="form-control">
+          </div>
+          <!-- Compatibilidad -->
+          <input type="hidden" name="email" value="">
+          <input type="hidden" name="comision" value="0">
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-end gap-2">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Listado con resumen (retirado / devuelto / bonificaciones / pagado / saldo) -->
+  <div class="card">
+    <div class="card-header">Listado de vendedores</div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Teléfono</th>
+            <th class="text-end">Retirado</th>
+            <th class="text-end">Devuelto</th>
+            <th class="text-end">Bonificaciones</th>
+            <th class="text-end">Pagado</th>
+            <th class="text-end">Saldo</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for v in vendedores %}
+          {# stats: dict: stats[v.id] = {retirado, devuelto, pagado, bonificado/bonificaciones, saldo} #}
+          {% set s = stats.get(v['id'], {}) if stats is defined else {} %}
+          {% set retirado = (s.get('retirado', 0) if s else 0) %}
+          {% set devuelto = (s.get('devuelto', 0) if s else 0) %}
+          {% set boni = (s.get('bonificaciones', s.get('bonificado', 0)) if s else 0) %}
+          {% set pagado = (s.get('pagado', 0) if s else 0) %}
+          {% set saldo_calc = retirado - devuelto - pagado - boni %}
+          {% set saldo = (s.get('saldo', saldo_calc) if s else saldo_calc) %}
+
+          <tr>
+            <td>{{ v['nombre'] }}</td>
+            <td>{{ v['telefono'] or '' }}</td>
+            <td class="text-end">{{ '%.2f'|format(retirado) }}</td>
+            <td class="text-end">{{ '%.2f'|format(devuelto) }}</td>
+            <td class="text-end">{{ '%.2f'|format(boni) }}</td>
+            <td class="text-end">{{ '%.2f'|format(pagado) }}</td>
+            <td class="text-end fw-semibold {{ 'text-danger' if saldo > 0 else 'text-success' }}">
+              {{ '%.2f'|format(saldo) }}
+            </td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm" role="group">
+                <a class="btn btn-outline-secondary"
+                   href="{{ url_for('vendedores_comisiones') }}?vendedor_id={{ v['id'] }}">
+                  Comisiones
+                </a>
+                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEdit-{{ v['id'] }}">
+                  Editar
+                </button>
+                <form class="d-inline" method="POST" action="{{ url_for('vendedores_delete') }}"
+                      onsubmit="return confirm('¿Eliminar a {{ v['nombre'] }}? Esta acción no se puede deshacer.');">
+                  <input type="hidden" name="vendedor_id" value="{{ v['id'] }}">
+                  <button class="btn btn-outline-danger">Eliminar</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Modal Editar -->
+          <div class="modal fade" id="modalEdit-{{ v['id'] }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+              <form class="modal-content" method="POST" action="{{ url_for('vendedores_update') }}">
+                <div class="modal-header">
+                  <h5 class="modal-title">Editar vendedor</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                  <input type="hidden" name="vendedor_id" value="{{ v['id'] }}">
+                  <div class="mb-3">
+                    <label class="form-label">Nombre</label>
+                    <input type="text" name="nombre" class="form-control" value="{{ v['nombre'] }}" required>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">Teléfono</label>
+                    <input type="text" name="telefono" class="form-control" value="{{ v['telefono'] or '' }}">
+                  </div>
+                  <!-- Compatibilidad -->
+                  <input type="hidden" name="email" value="{{ v['email'] or '' }}">
+                  <input type="hidden" name="comision" value="{{ '%.2f'|format(v['comision'] or 0) }}">
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+        {% endfor %}
+        {% if not vendedores %}
+          <tr><td colspan="8" class="text-center text-muted py-4">Aún no cargaste vendedores.</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

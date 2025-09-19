@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Devoluciones</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .right{text-align:right}
+    .hidden{display:none !important}
+    .top-right{position:fixed;top:12px;right:12px}
+    .table-sm th,.table-sm td{padding:.5rem}
+  </style>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <a class="btn btn-outline-secondary top-right" href="{{ url_for('dashboard') }}">⬅ Volver al Dashboard</a>
+
+  <h1 class="mb-3">Registrar Devolución</h1>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="alert alert-warning">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form id="form-dev" method="POST" action="{{ url_for('devoluciones') }}" class="card card-body shadow-sm">
+    <!-- Vendedor -->
+    <div class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label">Vendedor</label>
+        <select id="vendedorSel" name="vendedor_id" class="form-select" required>
+          <option value="" disabled selected>Elegí un vendedor</option>
+          {% for v in (vendedores or []) %}
+            <option
+              value="{{ v['id'] }}"
+              data-comision="{{ (v['comision'] or 0)|float }}"
+              data-tel="{{ (v['telefono'] or '') }}"
+            >{{ v['nombre'] }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">La comisión base se usa si no hay regla por marca.</div>
+      </div>
+      <div class="col-md-7">
+        <label class="form-label">Motivo (opcional)</label>
+        <input type="text" name="motivo" class="form-control" placeholder="Ej: Producto vencido, falla, etc.">
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <!-- Ítems -->
+    <div class="table-responsive">
+      <table class="table align-middle" id="tabla-items">
+        <thead class="table-light">
+          <tr>
+            <th style="width:34%">Producto</th>
+            <th style="width:12%">Marca</th>
+            <th style="width:10%">Cantidad</th>
+            <th style="width:14%">Precio</th>
+            <th style="width:10%">% Com.</th>
+            <th style="width:10%">Subtotal</th>
+            <th style="width:10%">Neto</th>
+            <th style="width:10%"></th>
+          </tr>
+        </thead>
+        <tbody id="items-body">
+          <tr data-pct-auto="1">
+            <td>
+              <select name="producto[]" class="form-select form-select-sm prod" required>
+                <option value="" disabled selected>Elegí un producto</option>
+                {% for p in (productos or []) %}
+                  <option
+                    value="{{ p['id'] }}"
+                    data-precio="{{ '%.2f'|format(p['precio'] or p['precio_venta'] or 0) }}"
+                    data-marca="{{ (p['marca'] or '')|upper }}"
+                    data-nombre="{{ p['nombre'] }}"
+                  >{{ p['nombre'] }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="marca text-muted">—</td>
+            <td><input type="number" name="cantidad[]" class="form-control form-control-sm cant" min="1" value="1" required></td>
+            <td><input type="number" step="0.01" name="precio[]" class="form-control form-control-sm precio" min="0" value="" required></td>
+            <td><input type="number" step="0.01" min="0" name="pct[]" class="form-control form-control-sm pct right" placeholder="auto"></td>
+            <td class="subtotal right">$ 0,00</td>
+            <td class="neto right">$ 0,00</td>
+            <td class="right"><button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarFila(this)">✕</button></td>
+          </tr>
+        </tbody>
+        <tfoot class="table-light">
+          <tr>
+            <th colspan="5" class="right">TOTAL</th>
+            <th id="tBruto" class="right">$ 0,00</th>
+            <th id="tNeto" class="right">$ 0,00</th>
+            <th></th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-outline-primary" onclick="agregarFila()">Agregar renglón +</button>
+      <button type="submit" class="btn btn-warning">Grabar devolución</button>
+    </div>
+  </form>
+
+  <!-- Historial -->
+  <div class="mt-5">
+    <h2 class="mb-3">Devoluciones recientes</h2>
+    {% if devoluciones_recientes and devoluciones_recientes|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-striped table-sm align-middle bg-white shadow-sm">
+          <thead class="table-light">
+            <tr>
+              <th style="width:10%">#</th>
+              <th style="width:30%">Vendedor</th>
+              <th style="width:20%">Fecha</th>
+              <th style="width:20%" class="right">Total</th>
+              <th style="width:20%">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in devoluciones_recientes %}
+              <tr data-id="{{ d['id'] }}" data-vendedor-nombre="{{ d['vendedor']|default('', true)|trim }}">
+                <td>Dev {{ d['id'] }}</td>
+                <td>
+                  <span class="view vendedor-view">{{ d['vendedor'] }}</span>
+                  <form class="edit hidden" method="POST" action="{{ url_for('devoluciones_update') }}">
+                    <input type="hidden" name="id" value="{{ d['id'] }}">
+                    <input type="text" class="form-control form-control-sm" name="vendedor" value="{{ d['vendedor'] }}">
+                  </form>
+                </td>
+                <td>
+                  <span class="view fecha-view">{{ d['fecha'] }}</span>
+                  <form class="edit hidden" method="POST" action="{{ url_for('devoluciones_update') }}">
+                    <input type="hidden" name="id" value="{{ d['id'] }}">
+                    <input type="date" class="form-control form-control-sm" name="fecha" value="{{ d['fecha'] }}">
+                  </form>
+                </td>
+                <td class="right">
+                  <span class="view total-view">{{ '%.2f'|format(d['total'] or 0) }}</span>
+                  <form class="edit hidden" method="POST" action="{{ url_for('devoluciones_update') }}">
+                    <input type="hidden" name="id" value="{{ d['id'] }}">
+                    <input type="number" step="0.01" class="form-control form-control-sm right" name="total" value="{{ '%.2f'|format(d['total'] or 0) }}">
+                  </form>
+                </td>
+                <td class="right">
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-editar">Editar</button>
+                  <form method="POST" action="{{ url_for('devoluciones_delete') }}" class="d-inline"
+                        onsubmit="return confirm(&quot;¿Eliminar devolución #{{ d['id'] }}?&quot;);">
+                    <input type="hidden" name="id" value="{{ d['id'] }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Borrar</button>
+                  </form>
+                  <button type="button" class="btn btn-sm btn-primary btn-guardar hidden">Guardar</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-cancelar hidden">Cancelar</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">Aún no hay devoluciones registradas.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Datos para JS -->
+<script>
+  const COMISIONES = [
+    {% for c in (comisiones or []) %}
+      {"vendedor_id": {{ c['vendedor_id'] }}, "marca": {{ (c['marca'] or '')|upper|tojson }}, "comision_pct": {{ (c['comision_pct'] or 0)|float }} }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+</script>
+
+<script>
+  function $(q,ctx=document){return ctx.querySelector(q)}
+  /* FIX: faltaba un paréntesis en $$ que rompía todo el JS */
+  function $$(q,ctx=document){return Array.from(ctx.querySelectorAll(q));}
+  const fmt = n => "$ " + (Number(n||0).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g,".");
+
+  // Mapa de comisiones vendedor+marca
+  const MAP_COMI = (() => {
+    const map = {};
+    (COMISIONES||[]).forEach(c=>{
+      const v = String(c.vendedor_id);
+      const m = String(c.marca||'').toUpperCase();
+      if(!map[v]) map[v] = {};
+      map[v][m] = Number(c.comision_pct||0);
+    });
+    return map;
+  })();
+
+  function vendedorActual(){
+    const sel = $('#vendedorSel');
+    const id = sel.value || null;
+    const opt = sel.selectedOptions[0];
+    const base = Number(opt?.dataset?.comision || 0);
+    return {id, base};
+  }
+
+  function comisionPara(vendedorId, marca, comBase){
+    const v = String(vendedorId||'');
+    const m = String(marca||'').toUpperCase().trim();
+    if (MAP_COMI[v] && MAP_COMI[v][m] != null) return Number(MAP_COMI[v][m]);
+    return Number(comBase||0);
+  }
+
+  function leerPct(tr, marca){
+    const {id: vendId, base} = vendedorActual();
+    const inp = tr.querySelector(".pct");
+    const val = inp.value;
+    const n = parseFloat(val);
+    if (isFinite(n)) return n;
+    return comisionPara(vendId, marca, base);
+  }
+
+  function onProductoChange(sel){
+    const tr = sel.closest("tr");
+    const opt = sel.selectedOptions[0];
+    const precio = opt?.getAttribute("data-precio") || "0";
+    const marca  = opt?.getAttribute("data-marca")  || "";
+    const precioInput = tr.querySelector(".precio");
+
+    /* FIX: siempre completar el precio sugerido del producto seleccionado */
+    precioInput.value = precio;
+
+    tr.querySelector(".marca").textContent = (marca || "—");
+    const {id: vendId, base} = vendedorActual();
+    if (tr.dataset.pctAuto !== "0") {
+      tr.querySelector(".pct").placeholder = comisionPara(vendId, marca, base).toFixed(2);
+      tr.querySelector(".pct").value = "";
+    }
+    recalcularFila(tr);
+  }
+
+  function recalcularFila(tr){
+    const cant = parseFloat(tr.querySelector(".cant").value || 0);
+    const precio = parseFloat(tr.querySelector(".precio").value || 0);
+    const marca = tr.querySelector(".marca").textContent || "";
+    const pct = leerPct(tr, marca);
+
+    const sub = cant * precio;
+    const desc = sub * (pct/100);
+    const neto = sub - desc;
+
+    tr.querySelector(".subtotal").textContent = fmt(sub);
+    tr.querySelector(".neto").textContent     = fmt(neto);
+
+    tr.dataset.bruto=sub; tr.dataset.neto=neto;
+    recalcularTotal();
+  }
+
+  function recalcularTotal(){
+    let b=0,n=0;
+    $$("#items-body tr").forEach(tr=>{
+      b += Number(tr.dataset.bruto||0);
+      n += Number(tr.dataset.neto||0);
+    });
+    $("#tBruto").textContent = fmt(b);
+    $("#tNeto").textContent  = fmt(n);
+  }
+
+  function agregarFila(){
+    const tbody = $("#items-body");
+    const tr0 = tbody.querySelector("tr");
+    const opciones = tr0.querySelector("select.prod").innerHTML;
+    const tr = document.createElement("tr");
+    tr.setAttribute("data-pct-auto","1");
+    tr.innerHTML = `
+      <td><select name="producto[]" class="form-select form-select-sm prod" required>${opciones}</select></td>
+      <td class="marca text-muted">—</td>
+      <td><input type="number" name="cantidad[]" class="form-control form-control-sm cant" min="1" value="1" required></td>
+      <td><input type="number" step="0.01" name="precio[]" class="form-control form-control-sm precio" min="0" value="" required></td>
+      <td><input type="number" step="0.01" min="0" name="pct[]" class="form-control form-control-sm pct right" placeholder="auto"></td>
+      <td class="subtotal right">$ 0,00</td>
+      <td class="neto right">$ 0,00</td>
+      <td class="right"><button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarFila(this)">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    wireRow(tr);
+  }
+
+  function eliminarFila(btn){
+    btn.closest("tr").remove();
+    recalcularTotal();
+  }
+
+  function wireRow(tr){
+    tr.querySelector(".cant").addEventListener("input", ()=>recalcularFila(tr));
+    tr.querySelector(".precio").addEventListener("input", ()=>recalcularFila(tr));
+    tr.querySelector(".pct").addEventListener("input", ()=>{
+      tr.dataset.pctAuto = "0";
+      recalcularFila(tr);
+    });
+    tr.querySelector(".prod").addEventListener("change", (e)=>onProductoChange(e.target));
+  }
+
+  // Inicial
+  document.querySelectorAll("#items-body tr").forEach(wireRow);
+
+  $("#vendedorSel").addEventListener("change", ()=>{
+    $$("#items-body tr").forEach(tr=>{
+      const marca = tr.querySelector(".marca").textContent || "";
+      if (tr.dataset.pctAuto !== "0") {
+        const {id: vendId, base} = vendedorActual();
+        tr.querySelector(".pct").placeholder = comisionPara(vendId, marca, base).toFixed(2);
+        tr.querySelector(".pct").value = "";
+      }
+      recalcularFila(tr);
+    });
+  });
+
+  // Validación submit
+  $("#form-dev").addEventListener("submit", (e)=>{
+    if(!$("#vendedorSel").value){
+      e.preventDefault(); alert("Elegí un vendedor"); return false;
+    }
+    if($$("#items-body tr").length===0){
+      e.preventDefault(); alert("Agregá al menos un renglón"); return false;
+    }
+  });
+
+  // --- Historial: edición inline ---
+  document.querySelectorAll('tr[data-id]').forEach(tr=>{
+    const btnEditar   = tr.querySelector('.btn-editar');
+    const btnGuardar  = tr.querySelector('.btn-guardar');
+    const btnCancelar = tr.querySelector('.btn-cancelar');
+    const edits = tr.querySelectorAll('form.edit');
+    const views = tr.querySelectorAll('.view');
+
+    function setEdit(on){
+      edits.forEach(f=>f.classList.toggle('hidden', !on));
+      views.forEach(s=>s.classList.toggle('hidden', on));
+      btnEditar.classList.toggle('hidden', on);
+      btnGuardar.classList.toggle('hidden', !on);
+      btnCancelar.classList.toggle('hidden', !on);
+    }
+
+    btnEditar?.addEventListener('click', ()=>setEdit(true));
+    btnCancelar?.addEventListener('click', ()=>setEdit(false));
+    tr.addEventListener('keydown', (ev)=>{
+      if (!btnGuardar.classList.contains('hidden')) {
+        if (ev.key === 'Enter'){ ev.preventDefault(); btnGuardar.click(); }
+        if (ev.key === 'Escape'){ ev.preventDefault(); btnCancelar.click(); }
+      }
+    });
+
+    btnGuardar?.addEventListener('click', ()=>{
+      const fd = new FormData(edits[0]);
+      for(let i=1;i<edits.length;i++){
+        edits[i].querySelectorAll('input').forEach(inp=>{
+          if (inp.name && inp.value !== undefined) fd.set(inp.name, inp.value);
+        });
+      }
+      fetch(edits[0].action, {method:'POST', body:fd})
+        .then(()=>location.reload())
+        .catch(()=>location.reload());
+    });
+  });
+</script>
+</body>
+</html>
